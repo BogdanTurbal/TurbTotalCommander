@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using static System.Net.Mime.MediaTypeNames;
+using static System.Windows.Forms.DataFormats;
 using static System.Windows.Forms.LinkLabel;
 
 namespace TurbTotalCommander
@@ -19,15 +20,13 @@ namespace TurbTotalCommander
         public TxtlRedactorForm()
         {
             InitializeComponent();
-
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
         }
 
-        public void LoadFile(string path)
+        public void LoadFile(TextBasedFile file)
         {
-            this.path = path;
-            string[] lines = File.ReadAllLines(path);
-            richTextBox.Text = StrArrToStr(lines);
-            
+            richTextBox.Text = file.Content;
         }
         private void richTextBox1_TextChanged(object sender, EventArgs e)
         {
@@ -84,6 +83,11 @@ namespace TurbTotalCommander
         private void checkBox1_CheckedChanged(object sender, EventArgs e)
         {
 
+        }
+
+        private void TxtlRedactorForm_Load(object sender, EventArgs e)
+        {
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
         }
     }
 }

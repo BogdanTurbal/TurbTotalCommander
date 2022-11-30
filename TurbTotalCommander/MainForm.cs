@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
+using System.Xml.Linq;
+using static System.Windows.Forms.DataFormats;
 using static TurbTotalCommander.FileManager;
 
 namespace TurbTotalCommander
@@ -8,118 +10,81 @@ namespace TurbTotalCommander
     public partial class MainForm : Form
     {
         private List<DriveInfo> drives;
-        private DriveInfo currentLeftDriver;
-        private DriveInfo currentRightDriver;
 
         private FileManager.Filter currentLeftFilter;
         private FileManager.Filter currentRightFilter;
-
         readonly int INITIAL_SEARCH_DEPTH = 4;
 
         string saved_path = "";
+        string saved_directory_path = "";
         private ListView currentListView;
         private TreeView currentTree;
-        //private TreeNode currentLeftNode;
-        //private TreeNode currentRightNode;
+        private readonly int INF_DEPTH = 255;
         public MainForm()
         {
             InitializeComponent();
             InitializeDriversList();
             InitializeFiltersComboBox();
             InitializeViews();
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
             currentListView = leftListView;
         }
 
         void InitializeViews()
         {
-            FillDirectoryTree(leftTreeView, currentLeftDriver.Name);
-            FillDirectoryTree(rightTreeView, currentRightDriver.Name);
+            TreeHandler.FillDirectoryTree(leftTreeView, leftDriversComboBox.Text);
+            leftTreeView.SelectedNode = leftTreeView.TopNode;
+            TreeHandler.FillDirectoryTree(rightTreeView, rightDriversComboBox.Text);
+            rightTreeView.SelectedNode = rightTreeView.TopNode;
 
-            leftTreeView.ImageList = this.imageList;
-            rightTreeView.ImageList = this.imageList;
+            leftTreeView.ImageList = rightTreeView.ImageList = this.imageList;
+            leftDepthSearch.Text = rightDepthSearch.Text = INITIAL_SEARCH_DEPTH.ToString();
 
-            leftDepthSearch.Text = INITIAL_SEARCH_DEPTH.ToString();
-            rightDepthSearch.Text = INITIAL_SEARCH_DEPTH.ToString();
+            leftPatternSearch.PlaceholderText = rightPatternSearch.PlaceholderText = "Search pattern";
+            leftDepthSearch.PlaceholderText = rightDepthSearch.PlaceholderText = "Depth of search";
 
-            leftPatternSearch.PlaceholderText = "Search pattern";
-            rightPatternSearch.PlaceholderText = "Search pattern";
+            leftListView.MultiSelect = rightListView.MultiSelect = false;
 
-            leftDepthSearch.PlaceholderText = "Depth of search";
-            rightDepthSearch.PlaceholderText = "Depth of search";
-
-            leftListView.MultiSelect = false;
-            rightListView.MultiSelect = false;
+            currentRightFilter = FileManager.Filter.NONE;
+            currentLeftFilter = FileManager.Filter.NONE;
         }
-        //methods
         private void InitializeDriversList()
         {
-            drives = DriveInfo.GetDrives().ToList();
-            currentLeftDriver = drives[0];
-
-            int rightIndex = (drives.Count > 1) ? 1 : 0;
-            currentRightDriver = drives[rightIndex];
-
-            leftDriversComboBox.Items.Clear();
-            var arrDrivers = drives.Select(x => x.Name).ToArray();
-
-            leftDriversComboBox.Items.AddRange(arrDrivers);
+            var drives = FileManager.GetDrivers();
+            leftDriversComboBox.Items.AddRange(drives);
             leftDriversComboBox.SelectedItem = leftDriversComboBox.Items[0];
-
-            rightDriversComboBox.Items.AddRange(arrDrivers);
-            rightDriversComboBox.SelectedItem = leftDriversComboBox.Items[rightIndex];
+            rightDriversComboBox.Items.AddRange(drives);
+            rightDriversComboBox.SelectedItem = leftDriversComboBox.Items[drives.Length > 1 ? 1 : 0];
         }
         private void InitializeFiltersComboBox()
         {
             List<string> filters = new List<string>();
             var namesOfFilters = FileManager.nameToFilter.Select(par => par.Key).ToArray();
-
             leftTypesComboBox.Items.Clear();
             leftTypesComboBox.Items.AddRange(namesOfFilters);
-
             rightTypesComboBox.Items.Clear();
             rightTypesComboBox.Items.AddRange(namesOfFilters);
-
-
-            //currentLeftNode = this.leftTreeView.TopNode;
-            //currentRightNode = this.rightTreeView.TopNode;
         }
-        private void FillDirectoryTree(TreeView treeView, string dir)
+        
+        private void UpdateFiles()
         {
-            treeView.Nodes.Clear();
-            TreeNode treeNode = new TreeNode(dir);
-            DirectoryInfo dirInf = new DirectoryInfo(dir);
-            treeNode.Tag = dirInf;
-            treeView.Nodes.Add(treeNode);
-
-            FillTreeNodes(treeNode);
-            treeView.SelectedNode = treeNode;
-        }
-        private void FillTreeNodes(TreeNode treeNode)
-        {
-            string dir = treeNode.FullPath;
-            foreach (DirectoryInfo di in FileManager.GetAllAccessibleDirectories(dir))
-            {
-                TreeNode child = new TreeNode(di.Name);
-                child.Tag = di;
-                child.ImageIndex = 0;
-                //FillTreeNodes(child, di, level + 1);
-                treeNode.Nodes.Add(child);
-
+            if(leftTreeView.SelectedNode == null) leftTreeView.SelectedNode = leftTreeView.Nodes[0];
+            FileManager.Filter filter = FileManager.Filter.NONE;
+            if (leftTypesComboBox.SelectedItem != null && FileManager.nameToFilter.ContainsKey(leftTypesComboBox.SelectedItem.ToString())){
+                filter = FileManager.nameToFilter[leftTypesComboBox.SelectedItem.ToString()];
             }
-        }
-        private void FillBeforeExpand(TreeNode treeNode)
-        {
-            string path = treeNode.FullPath;
-            foreach (TreeNode nd in treeNode.Nodes)
-            {
-                FillTreeNodes(nd);
+            FillListView(FileManager.GetAllAccessibleFiles(leftTreeView.SelectedNode.FullPath,
+                filter), leftListView);
+
+            if (rightTreeView.SelectedNode == null) rightTreeView.SelectedNode = rightTreeView.Nodes[0];
+            filter = FileManager.Filter.NONE;
+            if (rightTypesComboBox.SelectedItem != null && FileManager.nameToFilter.ContainsKey(rightTypesComboBox.SelectedItem.ToString())){
+                filter = FileManager.nameToFilter[rightTypesComboBox.SelectedItem.ToString()];
             }
+            FillListView(FileManager.GetAllAccessibleFiles(rightTreeView.SelectedNode.FullPath,filter), rightListView);
         }
-        private void FillAllFiles(ListView listView, TreeNode treeNode, FileManager.Filter filter)
-        {
-            string path = treeNode.FullPath;
-            FillListView(FileManager.GetAllAccessibleFiles(path, filter), listView);
-        }
+
         private void FillListView(List<FileInfo> fileInfos, ListView listView)
         {
             listView.Items.Clear();
@@ -127,198 +92,145 @@ namespace TurbTotalCommander
             foreach (var file in fileInfos)
             {
                 var listEl = new ListViewItem(file.Name)
+                {Tag = file};
+                listEl.ImageIndex = Path.GetExtension(file.Name) switch
                 {
-                    ImageIndex = 1,
-                    Tag = file,
+                    ".txt" => 2,
+                    ".html" => 3,
+                    ".exe" => 4,
+                    _ => 1
                 };
                 listView.Items.Add(listEl);
             }
         }
-        void SearchKeyDown(KeyEventArgs e, TextBox depthSearch, TreeView treeView, Filter filter, TextBox pattern)
+        void SearchKeyDown(KeyEventArgs e, TextBox depthSearch, TreeView treeView, Filter filter, TextBox pattern, ListView listView)
         {
             if (e.KeyCode == Keys.Enter)
             {
                 int number = INITIAL_SEARCH_DEPTH;
-                if (!Int32.TryParse(depthSearch.Text, out number))
+                if (Int32.TryParse(depthSearch.Text, out number))
                 {
+                    if (number < 0) number = INF_DEPTH;
                     depthSearch.Text = number.ToString();
+                    var files = FileManager.SearchFiles(treeView.SelectedNode.FullPath, filter, pattern.Text, number);
+                    FillListView(files, listView);
                 }
-                var files = FileManager.SearchFiles(treeView.SelectedNode.FullPath, filter, pattern.Text, number);
-                FillListView(files, leftListView);
             }
         }
         void LoadFile(string path)
         {
             string fileExt = System.IO.Path.GetExtension(path);
-
-            if (fileExt == ".txt")
-            {
-                LoadTextRedactor(path);
-            }
-            else if (fileExt == ".html")
-            {
-                LoadHtmlRedactor(path);
-            }
-            else
-            {
-                MessageBox.Show("Unsupported format!");
-            }
+            if (fileExt == ".txt") (new TxtFileRedactor()).LoadFile(path);
+            else if(fileExt == ".html") (new HtmlFileRedactor()).LoadFile(path);
+            else MessageBox.Show("Unsupported format!");
         }
-        void LoadTextRedactor(string path)
-        {
-            TxtlRedactorForm htmlRedactorForm = new TxtlRedactorForm();
-            htmlRedactorForm.Show();
-            htmlRedactorForm.LoadFile(path);
-        }
-        void LoadHtmlRedactor(string path)
-        {
-            HtmlRedactorForm htmlRedactorForm = new HtmlRedactorForm();
-            htmlRedactorForm.Show();
-            htmlRedactorForm.LoadFile(path);
-        }
-        //Tree events handlers
         private void leftTreeView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
         {
-            if (e.Node != null) FillBeforeExpand(e.Node);
-        }
-        private void leftTreeView_BeforeSelect(object sender, TreeViewCancelEventArgs e)
-        {
-            if (e != null && e.Node != null)
-            {
-                FillAllFiles(leftListView, e.Node, currentLeftFilter);
-            }
+            if (e.Node != null) TreeHandler.FillBeforeExpand(e.Node);
         }
         private void rightTreeView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
         {
-            if (e.Node != null) FillBeforeExpand(e.Node);
-        }
-        private void rightTreeView_BeforeSelect(object sender, TreeViewCancelEventArgs e)
-        {
-            if (e != null && e.Node != null) FillAllFiles(rightListView, e.Node, currentRightFilter);
+            if (e.Node != null) TreeHandler.FillBeforeExpand(e.Node);
         }
         //Drivers events
         private void leftDriversComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            FillDirectoryTree(leftTreeView, drives[leftDriversComboBox.SelectedIndex].Name);
+            TreeHandler.FillDirectoryTree(leftTreeView, leftDriversComboBox.Text);
         }
         private void rightDriversComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            FillDirectoryTree(rightTreeView, drives[rightDriversComboBox.SelectedIndex].Name);
+            TreeHandler.FillDirectoryTree(rightTreeView, rightDriversComboBox.Text);
         }
         //Choosing types events
         private void rightTypesComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            currentRightFilter = FileManager.nameToFilter[rightTypesComboBox.SelectedItem.ToString()];
-            FillAllFiles(rightListView, rightTreeView.SelectedNode, currentRightFilter);
+            Debug.WriteLine("Hello world");
+            //currentRightFilter = FileManager.nameToFilter[rightTypesComboBox.SelectedItem.ToString()];
+            UpdateFiles();
         }
         private void leftTypesComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            currentLeftFilter = FileManager.nameToFilter[leftTypesComboBox.SelectedItem.ToString()];
-            FillAllFiles(leftListView, leftTreeView.SelectedNode, currentLeftFilter);
+            //currentLeftFilter = FileManager.nameToFilter[leftTypesComboBox.SelectedItem.ToString()];
+            UpdateFiles();
         }
         //Pattern events
         private void leftPatternSearch_KeyDown(object sender, KeyEventArgs e)
         {
-            SearchKeyDown(e, leftDepthSearch, leftTreeView, currentLeftFilter, leftPatternSearch);
+            SearchKeyDown(e, leftDepthSearch, leftTreeView, currentLeftFilter, leftPatternSearch, leftListView);
         }
         private void rightPatternSearch_KeyDown(object sender, KeyEventArgs e)
         {
-            SearchKeyDown(e, rightDepthSearch, rightTreeView, currentRightFilter, rightPatternSearch);
+            SearchKeyDown(e, rightDepthSearch, rightTreeView, currentRightFilter, rightPatternSearch, rightListView);
         }
-        private void KeyDownU(TreeView treeView, ListView listView, FileManager.Filter filter, KeyEventArgs e)
+        private void KeyDownF(TreeView treeView, ListView listView, FileManager.Filter filter, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.C && e.Modifiers == Keys.Control)
             {
                 saved_path = Path.Combine(treeView.SelectedNode.FullPath, listView.SelectedItems[0].Text);
-            }
+            } 
             if (e.KeyCode == Keys.V && e.Modifiers == Keys.Control && saved_path != "")
             {
                 string new_path = Path.Combine(treeView.SelectedNode.FullPath, Path.GetFileName(saved_path));
                 if (File.Exists(new_path))
                 {
                     var result = MessageBox.Show("Rename copy? (yes - new_name = old_name + _1, no - replase)", "File already exist", MessageBoxButtons.YesNoCancel);
-                    if (result == DialogResult.Yes)
-                    {
-                        while (File.Exists(new_path))
-                        {
-                            string directory = new FileInfo(new_path).Directory.FullName;
-                            string new_name = Path.GetFileNameWithoutExtension(new_path) + "_1" + Path.GetExtension(new_path);
-                            new_path = Path.Combine(directory, new_name);
-                        }
-                        FileManager.CopyFile(saved_path, new_path);
-                    }
-                    else if (result == DialogResult.No)
-                    {
-                        FileManager.CopyFile(saved_path, new_path);
-                    }
+                    if (result == DialogResult.Yes) FileManager.CopyReneme(saved_path, new_path);
+                    else if (result == DialogResult.No) FileManager.CopyFile(saved_path, new_path);
                 }
-                else
-                {
-                    FileManager.CopyFile(saved_path, new_path);
-                }
-                FillAllFiles(listView, treeView.SelectedNode, filter);
+                else FileManager.CopyFile(saved_path, new_path);
+                UpdateFiles();
             }
-            if (e.KeyCode == Keys.D && e.Modifiers == Keys.Control && leftListView.SelectedItems.Count > 0)
+            if (e.KeyCode == Keys.D && e.Modifiers == Keys.Control && listView.SelectedItems.Count > 0)
             {
-                FileManager.DeleteFile(Path.Combine(leftTreeView.SelectedNode.FullPath, leftListView.SelectedItems[0].Text));
-                FillAllFiles(listView, treeView.SelectedNode, filter);
+                FileManager.DeleteFile(Path.Combine(treeView.SelectedNode.FullPath, listView.SelectedItems[0].Text));
+                UpdateFiles();
             }
+            
+        }
+        private void KeyDownD(TreeView treeView, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.D && e.Modifiers == Keys.Control)
+            {
+                var parrent = treeView.SelectedNode.Parent;
+                FileManager.DeleteDirectory(treeView.SelectedNode.FullPath);
+                var result1 = TreeHandler.GetAllNodes(leftTreeView)
+                           .FirstOrDefault(node => new DirectoryInfo(node.FullPath).FullName == new DirectoryInfo(parrent.FullPath).FullName);
+                var result2 = TreeHandler.GetAllNodes(rightTreeView)
+                           .FirstOrDefault(node => new DirectoryInfo(node.FullPath).FullName == new DirectoryInfo(parrent.FullPath).FullName);
+                if(result1 != null)
+                {
+                    TreeHandler.FillTreeNodes(result1);
+                    TreeHandler.FillBeforeExpand(result1);
+                }
+                
+                if(result2 != null)
+                {
+                    TreeHandler.FillTreeNodes(result2);
+                    TreeHandler.FillBeforeExpand(result2);
+                }
+                
+                UpdateFiles();
+            }
+
         }
         private void leftListView_DoubleClick(object sender, EventArgs e)
         {
-            if (leftListView.SelectedItems.Count == 1)
-
-            {
-                string leftPath = Path.Combine(leftTreeView.SelectedNode.FullPath, leftListView.SelectedItems[0].Text);
-                LoadFile(leftPath);
-            }
+                LoadFile(Path.Combine(leftTreeView.SelectedNode.FullPath, leftListView.SelectedItems[0].Text));
         }
         private void rightListView_DoubleClick(object sender, EventArgs e)
         {
-            if (rightListView.SelectedItems.Count == 1)
-
-            {
-                string rightPath = Path.Combine(rightTreeView.SelectedNode.FullPath, rightListView.SelectedItems[0].Text);
-                LoadFile(rightPath);
-            }
-        }
-        private void leftTreeView_AfterSelect(object sender, TreeViewEventArgs e)
-        {
-
-        }
-
-        private void leftListView_SelectedIndexChanged(object sender, EventArgs e)
-        {
-
+                LoadFile(Path.Combine(rightTreeView.SelectedNode.FullPath, rightListView.SelectedItems[0].Text));
         }
 
         private void leftListView_KeyDown(object sender, KeyEventArgs e)
         {
-            KeyDownU(currentTree, currentListView, currentLeftFilter, e);
+            KeyDownF(currentTree, currentListView, currentLeftFilter, e);
         }
 
         private void rightListView_KeyDown(object sender, KeyEventArgs e)
         {
-            KeyDownU(currentTree, currentListView, currentRightFilter, e);
+            KeyDownF(currentTree, currentListView, currentRightFilter, e);
         }
-
-        private void rightListView_SelectedIndexChanged(object sender, EventArgs e)
-        {
-
-        }
-
-        private void rightListView_Click(object sender, EventArgs e)
-        {
-            currentListView = rightListView;
-            currentTree = rightTreeView;
-        }
-
-        private void leftListView_Click(object sender, EventArgs e)
-        {
-            
-        }
-
-
         private void leftListView_MouseDown(object sender, MouseEventArgs e)
         {
             currentListView = leftListView;
@@ -333,6 +245,7 @@ namespace TurbTotalCommander
 
         private void CreateClick(TreeView treeView, TextBox pattern, ListView listView, FileManager.Filter filter)
         {
+            if (string.IsNullOrWhiteSpace(pattern.Text)) return;
             string new_path = Path.Combine(treeView.SelectedNode.FullPath, pattern.Text);
             if (File.Exists(new_path))
             {
@@ -348,8 +261,9 @@ namespace TurbTotalCommander
                 FileManager.CreateFile(new_path);
             }
             pattern.Text = "";
-            FillAllFiles(listView, treeView.SelectedNode, filter);
+            UpdateFiles();
         }
+
         private void leftCreate_Click(object sender, EventArgs e)
         {
             CreateClick(leftTreeView, leftPatternSearch, leftListView, currentLeftFilter);
@@ -358,6 +272,63 @@ namespace TurbTotalCommander
         private void rightCreate_Click(object sender, EventArgs e)
         {
             CreateClick(rightTreeView, rightPatternSearch, rightListView, currentRightFilter);
+        }
+
+        private void leftTreeView_AfterSelect(object sender, TreeViewEventArgs e)
+        {
+            if (e != null && e.Node != null) UpdateFiles();
+        }
+
+        private void rightTreeView_AfterSelect(object sender, TreeViewEventArgs e)
+        {
+            if (e != null && e.Node != null) UpdateFiles();
+        }
+
+        private void MainForm_Load(object sender, EventArgs e)
+        {
+
+        }
+
+        private void btnCreateDirectoryLeft_Click(object sender, EventArgs e)
+        {
+            CreateDirectoryUn(textBoxDirectoryNameLeft, leftTreeView, rightTreeView);
+        }
+
+        private void menuStrip1_ItemClicked(object sender, ToolStripItemClickedEventArgs e)
+        {
+
+        }
+        private void CreateDirectoryUn(TextBox textBox, TreeView treeView, TreeView diffTreeView)
+        {
+            if (textBox.Text != "")
+            {
+                string path = Path.Combine(treeView.SelectedNode.FullPath, textBox.Text);
+                FileManager.CreateDirectory(path);
+                TreeHandler.FillTreeNodes(treeView.SelectedNode);
+                var result = TreeHandler.GetAllNodes(diffTreeView)
+                           .FirstOrDefault(node => new DirectoryInfo(node.FullPath).FullName == new DirectoryInfo(path).Parent.FullName);
+                if (result != null)
+                    TreeHandler.FillTreeNodes(result);
+            }
+        }
+        private void btnCreateDirectoryRight_Click(object sender, EventArgs e)
+        {
+            CreateDirectoryUn(textBoxCreateDirectoryRight, rightTreeView, leftTreeView);
+        }
+
+        private void leftTreeView_KeyDown(object sender, KeyEventArgs e)
+        {
+            KeyDownD(leftTreeView, e);
+        }
+
+        private void rightTreeView_KeyDown(object sender, KeyEventArgs e)
+        {
+            KeyDownD(rightTreeView, e);
+        }
+
+        private void helpToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("Ctrl+C - copy, Ctrl+D - delete, Ctrl+V - past", "Help", MessageBoxButtons.OK);
         }
     }
 }

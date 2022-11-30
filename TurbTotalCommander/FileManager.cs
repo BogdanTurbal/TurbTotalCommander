@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Web;
 using static TurbTotalCommander.FileManager;
 
 namespace TurbTotalCommander
@@ -118,5 +119,70 @@ namespace TurbTotalCommander
             File.Create(path);
         }
 
+        public static string[] GetDrivers()
+        {
+            var drives = DriveInfo.GetDrives().ToList();
+            var arrDrivers = drives.Select(x => x.Name).ToArray();
+            return arrDrivers;
+        }
+
+        public static void CopyReneme(string saved_path, string new_path)
+        {
+            while (File.Exists(new_path))
+            {
+                string directory = new FileInfo(new_path).Directory.FullName;
+                string new_name = Path.GetFileNameWithoutExtension(new_path) + "_1" + Path.GetExtension(new_path);
+                new_path = Path.Combine(directory, new_name);
+            }
+            FileManager.CopyFile(saved_path, new_path);
+        }
+
+        public static void CreateDirectory(string path)
+        {
+            if(!Directory.Exists(path))
+            Directory.CreateDirectory(path);
+        }
+        public static void DeleteDirectory(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                    Directory.Delete(path, true);
+            }
+            catch { }
+            
+        }
+        static void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
+        {
+            // Get information about the source directory
+            var dir = new DirectoryInfo(sourceDir);
+
+            // Check if the source directory exists
+            if (!dir.Exists)
+                throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+
+            // Cache directories before we start copying
+            DirectoryInfo[] dirs = dir.GetDirectories();
+
+            // Create the destination directory
+            Directory.CreateDirectory(destinationDir);
+
+            // Get the files in the source directory and copy to the destination directory
+            foreach (FileInfo file in dir.GetFiles())
+            {
+                string targetFilePath = Path.Combine(destinationDir, file.Name);
+                file.CopyTo(targetFilePath);
+            }
+
+            // If recursive and copying subdirectories, recursively call this method
+            if (recursive)
+            {
+                foreach (DirectoryInfo subDir in dirs)
+                {
+                    string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                    CopyDirectory(subDir.FullName, newDestinationDir, true);
+                }
+            }
+        }
     }
 }

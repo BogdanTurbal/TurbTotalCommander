@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static System.Windows.Forms.DataFormats;
 
 namespace TurbTotalCommander
 {
@@ -18,15 +19,13 @@ namespace TurbTotalCommander
         public HtmlRedactorForm()
         {
             InitializeComponent();
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
             tegName.PlaceholderText = "enter redundant teg";
         }
-        public void LoadFile(string path)
+        public void LoadFile(TextBasedFile file)
         {
-            this.path = path;
-            string[] lines = File.ReadAllLines(path);
-            string text = "";
-            foreach (string line in lines) text += line + "\n";
-            richTextBox.Text = text;
+            richTextBox.Text = file.Content;
         }
         private void richTextBox1_TextChanged(object sender, EventArgs e)
         {
@@ -51,6 +50,11 @@ namespace TurbTotalCommander
             richTextBox.Text = Regex.Replace(richTextBox.Text, pattern, "");
             string pattern2 = @"</[ \n\s\t]*" + tegName.Text.Trim() + @"[ \n\s\t]*>";
             richTextBox.Text = Regex.Replace(richTextBox.Text, pattern2, "");
+        }
+
+        private void HtmlRedactorForm_Load(object sender, EventArgs e)
+        {
+
         }
     }
 }

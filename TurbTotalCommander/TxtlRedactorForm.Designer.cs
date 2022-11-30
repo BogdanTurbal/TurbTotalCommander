@@ -136,6 +136,7 @@
             this.MainMenuStrip = this.menuStrip1;
             this.Name = "TxtlRedactorForm";
             this.Text = "HtmlRedactorForm";
+            this.Load += new System.EventHandler(this.TxtlRedactorForm_Load);
             this.menuStrip1.ResumeLayout(false);
             this.menuStrip1.PerformLayout();
             this.ResumeLayout(false);
